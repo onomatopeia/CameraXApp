@@ -2,9 +2,13 @@ package com.migalska.cameraxapp
 
 import android.content.ContentValues
 import android.content.Context
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
+import android.hardware.camera2.CameraMetadata
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
+import android.util.Log
 import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -47,11 +51,26 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var cameraExecutor: Executor
 
+    private lateinit var cameraManager: CameraManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         requestPermissionLauncher.launch(android.Manifest.permission.CAMERA)
         cameraExecutor = Executors.newSingleThreadExecutor()
+
+        cameraManager = this.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+        cameraManager.cameraIdList.forEach {
+            val characteristics = cameraManager.getCameraCharacteristics(it)
+            val cameraLensFacing = characteristics.get(CameraCharacteristics.LENS_FACING)
+            if (cameraLensFacing == CameraMetadata.LENS_FACING_BACK) {
+                val intrinsic =
+                    characteristics.get(CameraCharacteristics.LENS_INTRINSIC_CALIBRATION)
+                Log.d(TAG, "Camera $it and its intrinsic matrix: ${intrinsic.contentToString()}")
+            } else {
+                Log.d(TAG, "Camera $it is not facing back")
+            }
+        }
         setContent {
             CameraXAppTheme {
                 val imageCaptureUseCase = remember {
@@ -100,6 +119,8 @@ class MainActivity : ComponentActivity() {
             contentValues
         ).build()
 
+
+
         imageCaptureUseCase.takePicture(
             outputFileOptions,
             cameraExecutor,
@@ -120,8 +141,6 @@ class MainActivity : ComponentActivity() {
         private const val TAG = "CameraXBasic"
         private const val FILENAME = "yyyy-MM-dd-HH-mm-ss-SSS"
         private const val PHOTO_TYPE = "image/jpeg"
-        private const val RATIO_4_3_VALUE = 4.0 / 3.0
-        private const val RATIO_16_9_VALUE = 16.0 / 9.0
     }
 }
 
@@ -162,7 +181,7 @@ fun CameraPreview(
 
 }
 
-suspend fun Context.cameraProvider(): ProcessCameraProvider = suspendCoroutine {
+private suspend fun Context.cameraProvider(): ProcessCameraProvider = suspendCoroutine {
     val listenableFuture = ProcessCameraProvider.getInstance(this)
     listenableFuture.addListener({
         it.resume(listenableFuture.get())
